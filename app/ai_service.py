@@ -155,6 +155,7 @@ def _fallback_generate(text: str) -> dict[str, Any]:
         "meanings": [_meaning(
             guess_type,
             f"A useful English {guess_type}. Edit this meaning after checking Gemini or a dictionary.",
+            "",
             f"「{cleaned}」的中文解釋可在儲存後手動編輯。若設定 GEMINI_API_KEY 或 GOOGLE_API_KEY，系統會產生更完整的繁體中文解釋。",
             f"I want to learn how to use '{cleaned}' correctly.",
             f"我想學會如何正確使用「{cleaned}」。",

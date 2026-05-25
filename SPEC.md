@@ -21,22 +21,21 @@ The target user is the app owner. The app is designed as a personal English lear
 
 ## 4. Generated Vocabulary Fields
 
-Each vocabulary item contains:
+Each vocabulary item has a small set of top-level metadata fields plus a single `meanings` array that holds **all** per-meaning content:
+
+Top-level:
 
 - `input_text`
-- `type`
-- `english_meaning`
-- `chinese_explanation`
-- `meanings`
-- `example_sentence`
-- `example_translation`
+- `type` — overall classification: word / phrase / idiom / expression / phrasal verb
+- `meanings` — array of meaning objects (see section 5)
 - `pronunciation`
-- `usage_note`
 - `similar_expressions`
 - `difficulty`
 - `tags`
 - `familiarity`
-- review metadata
+- review metadata (`review_count`, `correct_count`, `wrong_count`, `last_reviewed_at`, `next_review_at`)
+
+Per-meaning content (`english_meaning`, `chinese_translation`, `chinese_explanation`, `example_sentence`, `example_translation`, `usage_note`) lives **only** inside `meanings`. There are no duplicate top-level copies — `meanings_json` is the single source of truth.
 
 ## 5. Multiple Meanings
 
@@ -48,14 +47,20 @@ Each meaning entry contains:
 {
   "part_of_speech": "verb",
   "english_meaning": "To operate or manage something.",
-  "chinese_explanation": "經營、管理或運作。",
+  "chinese_translation": "經營；管理",
+  "chinese_explanation": "用在管理公司、團隊、會議、系統等使其正常運作的情境。",
   "example_sentence": "She runs a small software company.",
   "example_translation": "她經營一家小型軟體公司。",
   "usage_note": "Common with businesses, systems, meetings, and programs."
 }
 ```
 
-The top-level `english_meaning` and `chinese_explanation` store the primary meaning for quick display and backward compatibility. The `meanings` array stores richer meaning-level details.
+Two distinct Chinese fields:
+
+- `chinese_translation` — the SHORTEST direct rendering of the English word for this meaning (1–3 short equivalents joined by `、` or `；`). Displayed prominently. May be empty for idioms without a direct equivalent.
+- `chinese_explanation` — a longer Traditional Chinese sentence describing nuance, context, or connotation. Should not just repeat the translation.
+
+The Vocabulary, Flashcards, and Needs Practice views render the concise `chinese_translation` first (large, bold, primary color), then the longer 說明 below.
 
 ## 6. Gemini API Integration
 
@@ -99,6 +104,8 @@ Each question has:
 Questions are shown one at a time. After each answer, the correct answer is highlighted before advancing to the next question.
 
 When all questions in a session are answered, a summary modal appears with the session results.
+
+For words with multiple meanings, the question text and the correct answer enumerate **all** meanings (numbered `1.`, `2.`, …) so the learner is tested on every sense of the word in a single question. The concise `chinese_translation` is preferred for display; older entries without it fall back to `chinese_explanation`.
 
 ## 8. Familiarity System
 
@@ -165,23 +172,36 @@ Number of answered questions where familiarity_after > familiarity_before
 
 Time spent is calculated from the review task's start time to completion time. If the review is still in progress, it is calculated from start time to the current time.
 
+## 10b. UI Tabs
+
+The single-page app has four tabs:
+
+1. **Home** — Overview dashboard with two charts and a Needs Practice list:
+   - Pie chart of the familiarity distribution across all words (0–5).
+   - Line chart for the last 30 days showing words *added*, words *improved* (familiarity went up), and words that *reached expert* (familiarity 5 for the first time).
+   - Needs Practice grid: up to 6 words at familiarity 0 or 1, each rendered as a full card with concise Chinese translation, longer 說明, every meaning, and example sentences with translations.
+   Chart.js is self-hosted under `/static/chart.umd.min.js` to avoid CDN-block issues.
+
+2. **Add** — Generate an explanation via Gemini (or the local fallback) and save it. The form exposes only metadata fields (input_text, type, pronunciation, difficulty, similar, tags) plus a single JSON editor for the `meanings` array. There are no duplicate primary-meaning text fields.
+
+3. **Vocabulary** — Searchable list of saved words. Each card shows every meaning with all per-meaning fields.
+
+4. **Flashcards** — Click-to-flip cards ordered by ascending familiarity (least familiar first), tie-broken by oldest `last_reviewed_at`. Front shows the word; back shows every meaning. Keyboard shortcuts: `←` prev, `→` next, `Space`/`Enter` flip.
+
+5. **Daily Review** — see sections 7–10.
+
 ## 11. Database Tables
 
 ### `vocabulary_items`
 
-Stores vocabulary and review metadata.
+Stores vocabulary and review metadata. All per-meaning content (English, Chinese translation, Chinese explanation, examples, usage notes) lives inside `meanings_json` as the single source of truth — there are no duplicate columns.
 
-Important fields:
+Columns:
 
 - `input_text`
 - `type`
-- `english_meaning`
-- `chinese_explanation`
-- `meanings_json`
-- `example_sentence`
-- `example_translation`
+- `meanings_json` — JSON array of meaning objects (see section 5)
 - `pronunciation`
-- `usage_note`
 - `similar_expressions_json`
 - `difficulty`
 - `tags_json`
@@ -191,6 +211,10 @@ Important fields:
 - `wrong_count`
 - `last_reviewed_at`
 - `next_review_at`
+- `created_at`
+- `updated_at`
+
+A startup migration backfills `meanings_json` from any legacy per-meaning columns and drops them, so older databases upgrade in place on first run.
 
 ### `review_tasks`
 
@@ -227,6 +251,7 @@ Important fields:
 ## 12. API Endpoints
 
 ```text
+GET    /api/home/stats
 POST   /api/vocab/generate
 POST   /api/vocab
 GET    /api/vocab
@@ -238,6 +263,21 @@ GET    /api/review/today
 POST   /api/review/questions/{question_id}/answer
 GET    /api/review/tasks/{task_id}/summary
 GET    /api/review/history
+```
+
+`GET /api/home/stats` returns the data backing the Home page:
+
+```json
+{
+  "familiarity_distribution": [12, 4, 3, 6, 2, 1],
+  "activity": {
+    "labels": ["2026-04-26", "..."],
+    "added":    [0, 1, ...],
+    "improved": [0, 0, ...],
+    "expert":   [0, 0, ...]
+  },
+  "needs_practice": [ /* up to 6 vocab items at familiarity 0 or 1 */ ]
+}
 ```
 
 ## 13. Seed Data
