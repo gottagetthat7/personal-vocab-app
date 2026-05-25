@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Vocab</title>
+  <link rel="stylesheet" href="/static/styles.css?v=8" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Personal Vocabulary App</h1>
+      <p>Save English words with generated meanings, and review them with multiple-choice questions.</p>
+    </div>
+    <nav>
+      <button data-tab="home" class="active">Home</button>
+      <button data-tab="add">Add</button>
+      <button data-tab="list">Vocabulary</button>
+      <button data-tab="flashcards">Flashcards</button>
+      <button data-tab="review">Daily Review</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-home" class="tab active">
+      <div class="panel">
+        <h2>Overview</h2>
+        <div class="home-charts">
+          <div class="chart-box">
+            <h3>Familiarity Distribution</h3>
+            <div class="chart-wrap-pie"><canvas id="chartFamiliarity"></canvas></div>
+          </div>
+          <div class="chart-box">
+            <h3>Last 30 Days</h3>
+            <div class="chart-wrap-line"><canvas id="chartActivity"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Needs Practice</h2>
+        <p class="hint">Words with familiarity 0 or 1.</p>
+        <div id="needsPracticeGrid" class="practice-grid"></div>
+      </div>
+    </section>
+
+    <section id="tab-add" class="tab">
+      <div class="panel">
+        <h2>Add a word or phrase</h2>
+        <div class="row">
+          <input id="newText" placeholder="e.g., run, come up with, subtle, inevitable" />
+          <button id="generateBtn">Generate</button>
+        </div>
+        <p class="hint">The app uses Google Gemini when <code>GEMINI_API_KEY</code> or <code>GOOGLE_API_KEY</code> is configured. Otherwise, it uses a local editable fallback.</p>
+      </div>
+
+      <div id="generatedPanel" class="panel hidden">
+        <h2>Generated explanation</h2>
+        <div class="grid two">
+          <label>Word / Phrase<input id="g_input_text" /></label>
+          <label>Type<input id="g_type" placeholder="word / phrase / idiom" /></label>
+          <label>Pronunciation<input id="g_pronunciation" /></label>
+          <label>Difficulty<input id="g_difficulty" /></label>
+          <label>Similar expressions<input id="g_similar" placeholder="comma-separated" /></label>
+          <label>Tags<input id="g_tags" placeholder="comma-separated" /></label>
+        </div>
+        <h3>Meanings</h3>
+        <p class="hint">All meaning content (English, Chinese, examples, usage notes) lives here as a JSON array. For words with multiple meanings, include several entries.</p>
+        <textarea id="g_meanings" class="jsonbox"></textarea>
+        <button id="saveBtn">Save vocabulary item</button>
+      </div>
+    </section>
+
+    <section id="tab-list" class="tab">
+      <div class="panel">
+        <h2>Vocabulary list</h2>
+        <div class="row">
+          <input id="searchBox" placeholder="Search word, meaning, Chinese explanation, or tag" />
+          <button id="searchBtn">Search</button>
+          <button id="clearSearchBtn">Clear</button>
+        </div>
+      </div>
+      <div id="vocabList" class="cards"></div>
+    </section>
+
+    <section id="tab-flashcards" class="tab">
+      <div class="panel">
+        <h2>Flashcards</h2>
+        <p class="hint">Words are shown in order of familiarity, from least familiar to most. Click the card to flip it.</p>
+        <div class="flashcard-progress">
+          <span id="flashcardCount">0 / 0</span>
+          <span id="flashcardFam"></span>
+        </div>
+      </div>
+      <div id="flashcardArea" class="flashcard-area">
+        <div id="flashcard" class="flashcard" onclick="flipFlashcard()">
+          <div class="flashcard-inner">
+            <div class="flashcard-face flashcard-front">
+              <div class="flashcard-word" id="flashcardWord">Loading…</div>
+              <div class="flashcard-hint">Click to reveal meanings</div>
+            </div>
+            <div class="flashcard-face flashcard-back">
+              <div id="flashcardBack"></div>
+              <div class="flashcard-hint">Click to flip back</div>
+            </div>
+          </div>
+        </div>
+        <div class="flashcard-controls">
+          <button class="secondary" onclick="prevFlashcard()">← Prev</button>
+          <button onclick="nextFlashcard()">Next →</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-review" class="tab">
+      <div id="reviewTask" class="cards"></div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+
+  <div id="summaryModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>Review Complete!</h2>
+      <div id="modalContent"></div>
+      <div class="actions" style="margin-top:20px">
+        <button onclick="startReview()">Start Another Review</button>
+        <button class="secondary" onclick="closeSummaryModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/chart.umd.min.js?v=2"></script>
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>
