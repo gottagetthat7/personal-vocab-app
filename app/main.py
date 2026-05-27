@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+import base64
+import binascii
+import logging
+import os
+import secrets
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -15,7 +20,68 @@ from .vocab_service import create_vocab, delete_vocab, get_vocab, list_vocab, up
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+logger = logging.getLogger("uvicorn.error")
+
+# ---------------------------------------------------------------------------
+# Optional HTTP Basic Auth (single shared account)
+#
+# If APP_USERNAME and APP_PASSWORD are both set in the environment, every
+# request — including /, /static/*, and every /api/* — must carry a matching
+# Authorization: Basic header. The browser handles the login prompt and
+# caches the credentials per-device, so each device just enters it once.
+#
+# If either env var is unset, the middleware becomes a no-op so local
+# development keeps working unchanged.
+#
+# Always serve over HTTPS in production: Basic Auth credentials travel as
+# base64-encoded plaintext on every request.
+# ---------------------------------------------------------------------------
+_AUTH_USERNAME = os.getenv("APP_USERNAME") or ""
+_AUTH_PASSWORD = os.getenv("APP_PASSWORD") or ""
+_AUTH_ENABLED = bool(_AUTH_USERNAME and _AUTH_PASSWORD)
+
+
+def _check_basic_auth(header_value: str | None) -> bool:
+    """Return True iff the Authorization header matches the configured creds.
+
+    Uses secrets.compare_digest to avoid timing side-channels.
+    """
+    if not header_value or not header_value.lower().startswith("basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header_value.split(" ", 1)[1], validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, IndexError):
+        return False
+    if ":" not in decoded:
+        return False
+    user, _, pw = decoded.partition(":")
+    user_ok = secrets.compare_digest(user.encode("utf-8"), _AUTH_USERNAME.encode("utf-8"))
+    pw_ok = secrets.compare_digest(pw.encode("utf-8"), _AUTH_PASSWORD.encode("utf-8"))
+    return user_ok and pw_ok
+
+
 app = FastAPI(title="Personal AI Vocabulary App")
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if _AUTH_ENABLED and not _check_basic_auth(request.headers.get("authorization")):
+        return Response(
+            status_code=401,
+            content="Not authenticated",
+            headers={"WWW-Authenticate": 'Basic realm="Personal Vocab App"'},
+        )
+    return await call_next(request)
+
+
+if _AUTH_ENABLED:
+    logger.info("HTTP Basic Auth enabled for all routes (user: %s).", _AUTH_USERNAME)
+else:
+    logger.warning(
+        "HTTP Basic Auth is DISABLED — set APP_USERNAME and APP_PASSWORD env "
+        "vars to require login. Safe for local dev; unsafe for public deployment."
+    )
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 

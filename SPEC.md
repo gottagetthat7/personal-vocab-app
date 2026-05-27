@@ -307,6 +307,10 @@ The project includes:
 - README documentation
 - SPEC documentation
 
+## 14b. Authentication
+
+The app supports optional HTTP Basic Auth via two env vars: `APP_USERNAME` and `APP_PASSWORD`. When both are set, a middleware enforces the credentials on every request (UI, static assets, and all API endpoints). When either is unset, the middleware is a no-op so local development needs no configuration. Always serve over HTTPS in production — Basic Auth credentials are base64, not encrypted.
+
 ## 15. Run Commands
 
 Create environment:

@@ -109,6 +109,27 @@ export GEMINI_MODEL="gemini-2.5-flash"
 
 The app still works without an API key by using a local fallback generator.
 
+## Authentication (for public deployments)
+
+If you deploy this app to the public internet, set both `APP_USERNAME` and
+`APP_PASSWORD` env vars. When both are present, every request — including
+the page itself, static assets, and every API endpoint — requires HTTP
+Basic Auth matching those credentials.
+
+```bash
+export APP_USERNAME="me"
+export APP_PASSWORD="$(openssl rand -base64 24)"
+```
+
+The browser handles the login prompt natively and caches the credentials
+per-device, so each device only prompts on first visit. If either variable
+is unset, the app runs with **no auth** — fine for local dev, unsafe for a
+public deployment.
+
+> **Always serve over HTTPS in production.** Basic Auth credentials are
+> base64-encoded plaintext on every request; without TLS anyone on the
+> network can read them.
+
 ## Seed sample vocabulary
 
 The package already includes a sample local SQLite database with 50 vocabulary items. To recreate or add sample items manually:
