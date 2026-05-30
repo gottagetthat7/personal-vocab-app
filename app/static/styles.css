@@ -217,3 +217,10 @@ label input, label textarea { margin-top: 6px; font-weight: 400; color: var(--te
 .modal { position: fixed; inset: 0; background: rgba(16,24,40,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal.hidden { display: none; }
 .modal-box { background: var(--panel); border-radius: 20px; padding: 32px; max-width: 540px; width: 90%; box-shadow: 0 24px 64px rgba(16,24,40,0.16); }
+
+/* Spell-the-word question */
+.spell-input-row { display: flex; gap: 8px; margin-top: 12px; }
+.spell-input { flex: 1; padding: 12px 14px; border: 2px solid var(--line); border-radius: 10px; font-size: 16px; font-family: inherit; }
+.spell-input:focus { outline: none; border-color: var(--primary); }
+.spell-input.spell-correct { border-color: #17b26a; background: #ecfdf3; }
+.spell-input.spell-wrong { border-color: var(--danger); background: #fef3f2; }

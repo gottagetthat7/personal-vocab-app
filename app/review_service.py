@@ -8,6 +8,8 @@ from typing import Any
 from .database import get_connection, row_to_question, row_to_vocab
 
 MAX_DAILY_QUESTIONS = 20
+MAX_EXPERT_SPELL_PER_SESSION = 3
+EXPERT_FAMILIARITY = 5
 REVIEW_INTERVALS = {
     0: 1,
     1: 1,
@@ -116,6 +118,16 @@ def _question_for(vocab: dict[str, Any], all_vocab: list[dict[str, Any]]) -> dic
     }
 
 
+def _spell_question_for(vocab: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "vocab_id": vocab["id"],
+        "question_type": "spell_word",
+        "question_text": f"Spell the word or phrase that means: {_meaning_text(vocab)}",
+        "correct_answer": vocab["input_text"],
+        "options": [],
+    }
+
+
 def _summary_for(task: dict[str, Any], questions: list[dict[str, Any]]) -> dict[str, Any]:
     answered = [q for q in questions if q.get("is_correct") is not None]
     correct = [q for q in answered if q.get("is_correct") is True]
@@ -179,14 +191,27 @@ def create_daily_task() -> dict[str, Any]:
     due.sort(key=lambda v: (v.get("familiarity", 0), v.get("last_reviewed_at") or ""))
     selected = due[:MAX_DAILY_QUESTIONS]
 
+    # Sprinkle in a few expert (familiarity 5) words as spelling questions so
+    # mastered vocabulary stays active even past its 14-day cadence.
+    selected_ids = {v["id"] for v in selected}
+    expert_pool = [
+        v for v in all_vocab
+        if int(v.get("familiarity") or 0) >= EXPERT_FAMILIARITY and v["id"] not in selected_ids
+    ]
+    random.shuffle(expert_pool)
+    expert_sample = expert_pool[:MAX_EXPERT_SPELL_PER_SESSION]
+
+    total = len(selected) + len(expert_sample)
+
     with get_connection() as conn:
         cursor = conn.execute(
             "INSERT INTO review_tasks (review_date, status, total_questions, started_at) VALUES (?, ?, ?, ?)",
-            (now, "not_started", len(selected), now),
+            (now, "not_started", total, now),
         )
         task_id = cursor.lastrowid
-        for vocab in selected:
-            q = _question_for(vocab, all_vocab)
+        queue = [(_question_for(v, all_vocab)) for v in selected]
+        queue.extend(_spell_question_for(v) for v in expert_sample)
+        for q in queue:
             conn.execute(
                 """
                 INSERT INTO review_questions (
@@ -228,7 +253,10 @@ def answer_question(question_id: int, user_answer: str) -> dict[str, Any] | None
                 "summary": task["summary"],
             }
 
-        is_correct = user_answer.strip() == q["correct_answer"].strip()
+        if q.get("question_type") == "spell_word":
+            is_correct = user_answer.strip().casefold() == q["correct_answer"].strip().casefold()
+        else:
+            is_correct = user_answer.strip() == q["correct_answer"].strip()
 
         vocab = conn.execute("SELECT * FROM vocabulary_items WHERE id = ?", (q["vocab_id"],)).fetchone()
         if not vocab:

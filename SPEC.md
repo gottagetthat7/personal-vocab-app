@@ -90,6 +90,7 @@ Question types:
 
 1. Choose the correct meaning for a word.
 2. Choose the correct word for a meaning.
+3. Spell the word given its meaning (no options). Reserved for expert-level words — see section 9.
 
 Each question has:
 
@@ -146,7 +147,10 @@ Current default:
 
 ```text
 MAX_DAILY_QUESTIONS = 20
+MAX_EXPERT_SPELL_PER_SESSION = 3
 ```
+
+In addition to the due words, each session sprinkles in up to `MAX_EXPERT_SPELL_PER_SESSION` random words that have reached expert (familiarity 5) and are not already in the due selection. These are presented as `spell_word` questions: the prompt shows the meaning(s) and the learner types the word — there are no multiple-choice options. Grading is case-insensitive and whitespace-trimmed. Familiarity updates with the same `+1 / -1` rule clamped to 0–5, so a misspelling demotes the word from 5 to 4 and re-enters the regular MC rotation.
 
 `GET /api/review/today` returns the most recent session for today, or null if none exists.
 

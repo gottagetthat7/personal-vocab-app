@@ -32,9 +32,13 @@ def test_create_daily_task_uses_due_words(temp_db):
 
     task = create_daily_task()
     assert task["review_date"].startswith(date.today().isoformat())
-    assert task["total_questions"] == 1
-    assert task["questions"][0]["vocab_id"] == due["id"]
-    assert len(task["questions"][0]["options"]) == 4
+    # 1 due MC question + 1 sprinkled expert spelling question.
+    assert task["total_questions"] == 2
+    mc = next(q for q in task["questions"] if q["question_type"] != "spell_word")
+    assert mc["vocab_id"] == due["id"]
+    assert len(mc["options"]) == 4
+    spell = next(q for q in task["questions"] if q["question_type"] == "spell_word")
+    assert spell["vocab_id"] == future["id"]
 
 
 def test_multiple_sessions_can_be_created_in_one_day(temp_db):
@@ -109,6 +113,64 @@ def test_summary_is_completed_when_all_questions_answered(temp_db):
     assert last_result is not None
     assert last_result["summary"]["completed"] is True
     assert last_result["summary"]["answered_questions"] == task["total_questions"]
+
+
+def test_expert_words_get_spelling_questions(temp_db):
+    due_item = _add_vocab("subtle", "Not easy to notice.", familiarity=0)
+    expert = _add_vocab("inevitable", "Impossible to avoid.", familiarity=5)
+    # Expert word's next_review_at is far in the future, so it would not be due.
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE vocabulary_items SET next_review_at = ? WHERE id = ?",
+            ((date.today() + timedelta(days=14)).isoformat(), expert["id"]),
+        )
+
+    task = create_daily_task()
+
+    spell_qs = [q for q in task["questions"] if q["question_type"] == "spell_word"]
+    assert len(spell_qs) == 1
+    sq = spell_qs[0]
+    assert sq["vocab_id"] == expert["id"]
+    assert sq["correct_answer"] == "inevitable"
+    assert sq["options"] == []
+    assert task["total_questions"] == 2
+    assert any(q["vocab_id"] == due_item["id"] for q in task["questions"])
+
+
+def test_spell_word_grading_is_case_insensitive(temp_db):
+    _add_vocab("subtle", "Not easy to notice.", familiarity=0)
+    expert = _add_vocab("Inevitable", "Impossible to avoid.", familiarity=5)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE vocabulary_items SET next_review_at = ? WHERE id = ?",
+            ((date.today() + timedelta(days=14)).isoformat(), expert["id"]),
+        )
+
+    task = create_daily_task()
+    sq = next(q for q in task["questions"] if q["question_type"] == "spell_word")
+
+    result = answer_question(sq["id"], "  INEVITABLE  ")
+    assert result is not None
+    assert result["is_correct"] is True
+    assert result["new_familiarity"] == 5  # already at cap
+
+
+def test_spell_word_wrong_demotes_expert_word(temp_db):
+    _add_vocab("subtle", "Not easy to notice.", familiarity=0)
+    expert = _add_vocab("inevitable", "Impossible to avoid.", familiarity=5)
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE vocabulary_items SET next_review_at = ? WHERE id = ?",
+            ((date.today() + timedelta(days=14)).isoformat(), expert["id"]),
+        )
+
+    task = create_daily_task()
+    sq = next(q for q in task["questions"] if q["question_type"] == "spell_word")
+
+    result = answer_question(sq["id"], "inevitible")
+    assert result is not None
+    assert result["is_correct"] is False
+    assert result["new_familiarity"] == 4
 
 
 def test_multiple_meanings_are_used_in_question_text_or_options(temp_db):

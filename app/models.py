@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
-QuestionType = Literal["choose_meaning", "choose_word"]
+QuestionType = Literal["choose_meaning", "choose_word", "spell_word"]
 
 
 class GenerateRequest(BaseModel):

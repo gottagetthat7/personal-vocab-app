@@ -226,6 +226,16 @@ function renderReview() {
   const wrong = answered.filter(q => q.is_correct === false).length;
   const pct = Math.round((answered.length / total) * 100);
 
+  const isSpell = next.question_type === 'spell_word';
+  const body = isSpell
+    ? `<div class="spell-input-row">
+        <input type="text" id="spellInput" class="spell-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the word or phrase…" />
+        <button onclick="submitSpellAnswer(${next.id})">Submit</button>
+      </div>`
+    : (next.options || []).map(opt =>
+        `<button class="option" data-answer="${escapeHtml(opt)}" onclick="answerQuestion(${next.id}, this.dataset.answer)">${escapeHtml(opt)}</button>`
+      ).join('');
+
   $('reviewTask').innerHTML = `
     <div class="panel">
       <div class="review-progress">
@@ -237,14 +247,33 @@ function renderReview() {
     <article class="card" id="questionCard">
       <div class="meta">${escapeHtml(next.question_type.replace('_', ' '))}</div>
       <h3>${escapeHtml(next.question_text)}</h3>
-      ${(next.options || []).map(opt =>
-        `<button class="option" data-answer="${escapeHtml(opt)}" onclick="answerQuestion(${next.id}, this.dataset.answer)">${escapeHtml(opt)}</button>`
-      ).join('')}
+      ${body}
     </article>`;
+
+  if (isSpell) {
+    const input = $('spellInput');
+    input.focus();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitSpellAnswer(next.id); }
+    });
+  }
+}
+
+function submitSpellAnswer(id) {
+  const input = $('spellInput');
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return toast('Type your answer first.');
+  answerQuestion(id, value);
 }
 
 async function answerQuestion(id, user_answer) {
   document.querySelectorAll('.option').forEach(b => b.disabled = true);
+  const spellInput = $('spellInput');
+  if (spellInput) {
+    spellInput.disabled = true;
+    spellInput.nextElementSibling && (spellInput.nextElementSibling.disabled = true);
+  }
   try {
     const result = await api(`/api/review/questions/${id}/answer`, {
       method: 'POST',
@@ -255,6 +284,9 @@ async function answerQuestion(id, user_answer) {
       if (btn.dataset.answer === result.correct_answer) btn.classList.add('option-correct');
       else if (btn.dataset.answer === user_answer && !result.is_correct) btn.classList.add('option-wrong');
     });
+    if (spellInput) {
+      spellInput.classList.add(result.is_correct ? 'spell-correct' : 'spell-wrong');
+    }
 
     const feedback = document.createElement('div');
     feedback.className = `result ${result.is_correct ? 'correct' : 'wrong'}`;
@@ -280,6 +312,10 @@ async function answerQuestion(id, user_answer) {
     loadVocab();
   } catch (e) {
     document.querySelectorAll('.option').forEach(b => b.disabled = false);
+    if (spellInput) {
+      spellInput.disabled = false;
+      spellInput.nextElementSibling && (spellInput.nextElementSibling.disabled = false);
+    }
     toast(e.message);
   }
 }
